@@ -170,7 +170,7 @@ body {
 <body>
 <main class="sky-field" data-verdict="unknown">
   <div class="report">
-    <p class="office-line">Is it safe to bike? · Hack Club HQ · Shelburne VT</p>
+    <p class="office-line">Is it safe to bike? · Hack Club HQ · Burlington VT</p>
     <h1 class="verdict" id="verdict">Reading the sky…</h1>
     <hr class="verdict-rule">
     <p class="sky-report" id="sky-report">Fetching the forecast for the next few hours.</p>
@@ -185,15 +185,15 @@ body {
     </section>
   </div>
   <footer class="edition-line" id="edition-line">
-    IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a> · 44.38°N 73.23°W
+    IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a> · 44.47°N 73.22°W
   </footer>
   <noscript><p style="padding:1rem">This page needs JavaScript to fetch the forecast.
     Look out a window instead.</p></noscript>
 </main>
 
 <script>
-// Hack Club HQ, 15 Falls Rd, Shelburne VT. Change these to move the office.
-const OFFICE = { lat: 44.3807, lon: -73.2273, tz: "America/New_York" };
+// Hack Club HQ, 212 Battery St, Burlington VT. Change these to move the office.
+const OFFICE = { lat: 44.4737, lon: -73.2183, tz: "America/New_York" };
 const RIDE_MINUTES = 45;          // how long you're exposed to the sky
 const HOURS_SHOWN = 6;            // width of the rain strip
 const DRIZZLE_MM_H = 0.6;         // below this you won't notice
@@ -326,7 +326,7 @@ function render(data) {
 
   document.getElementById("edition-line").innerHTML =
     'IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a>'
-    + " · 44.38°N 73.23°W · FETCHED " + clock(now);
+    + " · 44.47°N 73.22°W · FETCHED " + clock(now);
 }
 
 async function check() {

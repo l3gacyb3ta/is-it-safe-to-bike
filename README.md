@@ -5,7 +5,7 @@ bike right now, are you going to get poured on?
 
 Open `index.html` — it's the whole site, no build step, no dependencies. It
 fetches the [Open-Meteo](https://open-meteo.com/) 15-minute forecast for
-Shelburne VT and gives you one of three verdicts:
+212 Battery St, Burlington VT and gives you one of three verdicts:
 
 - **GO BIKE.** — under 0.6 mm/h for your whole ride; you won't notice it
 - **YOU'LL GET DAMP.** — light rain (up to 2.6 mm/h); rideable, bring the jacket
