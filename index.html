@@ -108,6 +108,9 @@ body {
   height: 56px;
   border: var(--rule) solid var(--ink);
   background: #fdf8ec;
+  position: relative;
+  cursor: ew-resize;
+  touch-action: none; /* the strip is a slider on touch too */
 }
 .rain-box {
   flex: 1;
@@ -127,7 +130,21 @@ body {
   background: repeating-linear-gradient(45deg,
               var(--rain) 0 1px, transparent 1px 4px);
 }
-.rain-box.ride-window { border-top: 3px solid var(--ink); }
+/* Your ride, drawn on top of the weather. Drag its end to match the ride. */
+.ride-span {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  border-top: 3px solid var(--ink);
+  pointer-events: none;
+}
+.ride-span::after {          /* grab tab at the end of the ride */
+  content: "";
+  position: absolute;
+  right: -4px; top: -3px;
+  width: 8px; height: 12px;
+  background: var(--ink);
+}
 
 .hour-labels {
   display: flex;
@@ -155,6 +172,14 @@ body {
               var(--rain) 0 1px, transparent 1px 4px);
 }
 
+.cover-note {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 0.75rem 0 0;
+  border-top: var(--rule) solid #d8cdb4;
+  padding-top: 0.5rem;
+}
+
 .edition-line {
   font-family: var(--font-mono);
   font-size: 14px;
@@ -176,13 +201,16 @@ body {
     <p class="sky-report" id="sky-report">Fetching the forecast for the next few hours.</p>
     <p class="leave-by" id="leave-by"></p>
     <section class="rain-strip">
-      <div class="rain-boxes" id="rain-boxes"></div>
+      <div class="rain-boxes" id="rain-boxes" role="slider" tabindex="0"
+           aria-label="Ride length, drawn on the rain forecast. Drag or use arrow keys."
+           aria-valuemin="15" aria-valuemax="360"></div>
       <div class="hour-labels" id="hour-labels"></div>
       <p class="strip-legend">the next 6 hours · each box = 15 min ·
         <span class="rain-swatch"></span> fill = how hard it's raining ·
         <span class="chance-swatch"></span> = sky's undecided ·
-        bar on top = your ride if you leave now</p>
+        bar on top = your ride if you leave now — drag its end to match your ride</p>
     </section>
+    <p class="cover-note" id="cover-note"></p>
   </div>
   <footer class="edition-line" id="edition-line">
     IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a> · 44.47°N 73.22°W
@@ -194,17 +222,23 @@ body {
 <script>
 // Hack Club HQ, 212 Battery St, Burlington VT. Change these to move the office.
 const OFFICE = { lat: 44.4737, lon: -73.2183, tz: "America/New_York" };
-const RIDE_MINUTES = 45;          // how long you're exposed to the sky
 const HOURS_SHOWN = 6;            // width of the rain strip
+const COVER_HOURS = 18;           // how far ahead the bike-cover question looks
 const DRIZZLE_MM_H = 0.6;         // below this you won't notice
 const POURING_MM_H = 2.6;         // above this you come home soaked
 const FULL_BOX_MM_H = 8;          // rain rate that fills a strip box completely
+const COVER_MM = 0.5;             // an hour with this much rain = cover the bike
+
+// How long you're exposed to the sky. The page remembers your usual ride.
+const RIDE_KEY = "iistb-ride-minutes";
+let rideMinutes = Math.min(360, Math.max(15,
+  parseInt(localStorage.getItem(RIDE_KEY), 10) || 45));
 
 const API = "https://api.open-meteo.com/v1/forecast"
   + `?latitude=${OFFICE.lat}&longitude=${OFFICE.lon}`
   + "&minutely_15=precipitation,weather_code"
-  + "&hourly=precipitation_probability"
-  + `&forecast_minutely_15=${HOURS_SHOWN * 4}&forecast_hours=${HOURS_SHOWN + 2}`
+  + "&hourly=precipitation_probability,precipitation"
+  + `&forecast_minutely_15=${HOURS_SHOWN * 4}&forecast_hours=${COVER_HOURS}`
   + `&timezone=${OFFICE.tz}&timeformat=unixtime`; // epoch times: unambiguous everywhere
 
 const THUNDER_CODES = new Set([95, 96, 99]);
@@ -213,8 +247,21 @@ const THUNDER_CODES = new Set([95, 96, 99]);
 function clock(date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: OFFICE.tz });
 }
+function clockHour(date) {
+  return date.toLocaleTimeString([], { hour: "numeric", timeZone: OFFICE.tz }).toLowerCase();
+}
+function fmtRide(m) {
+  if (m < 60) return m + " minutes";
+  const h = Math.floor(m / 60), rest = m % 60;
+  if (rest) return h + "h " + rest + "m";
+  return h === 1 ? "hour" : h + " hours";
+}
+
+let lastData = null;   // kept so dragging the ride bar re-renders without refetching
+let lastShown = 0;     // boxes currently in the strip
 
 function render(data) {
+  lastData = data;
   const epochs = data.minutely_15.time;                          // unix seconds
   const times = epochs.map(t => new Date(t * 1000));
   const rates = data.minutely_15.precipitation.map(mm => mm * 4); // mm per 15min -> mm/h
@@ -229,34 +276,35 @@ function render(data) {
   let start = 0;
   while (start < times.length - 1 && times[start + 1] <= now) start++;
 
-  const rideSlots = Math.ceil(RIDE_MINUTES / 15);
+  const rideSlots = Math.min(Math.ceil(rideMinutes / 15), rates.length - start);
   const ride = rates.slice(start, start + rideSlots);
   const rideMax = Math.max(...ride);
   const thunder = codes.slice(start, start + rideSlots).some(c => THUNDER_CODES.has(c));
   const rideProb = probAt(start);
+  const rideLabel = fmtRide(rideMinutes);
 
   let verdict, headline, report;
   if (thunder) {
     verdict = "soaked";
     headline = "Nope. Thunder.";
     report = "There's a thunderstorm in the forecast for the next "
-      + RIDE_MINUTES + " minutes. This one isn't about getting wet — stay in.";
+      + rideLabel + ". This one isn't about getting wet — stay in.";
   } else if (rideMax >= POURING_MM_H) {
     verdict = "soaked";
     headline = "Nope. Stay in.";
     report = "It's properly raining out there — up to "
-      + rideMax.toFixed(1) + " mm/h over the next " + RIDE_MINUTES
-      + " minutes. You'd come home soaked. Make some tea.";
+      + rideMax.toFixed(1) + " mm/h over the next " + rideLabel
+      + ". You'd come home soaked. Make some tea.";
   } else if (rideMax >= DRIZZLE_MM_H) {
     verdict = "damp";
     headline = "You'll get damp.";
     report = "Light rain, around " + rideMax.toFixed(1) + " mm/h at worst over the next "
-      + RIDE_MINUTES + " minutes. Rideable if you don't mind a little water, "
+      + rideLabel + ". Rideable if you don't mind a little water, "
       + "but bring the jacket.";
   } else {
     verdict = "go";
     headline = "Go bike.";
-    report = "No real rain in the next " + RIDE_MINUTES + " minutes."
+    report = "No real rain in the next " + rideLabel + "."
       + (rideProb !== null && rideProb >= 60
          ? " The sky is undecided though (" + rideProb + "% chance this hour), so don't dawdle."
          : " The sky is on your side.");
@@ -288,16 +336,17 @@ function render(data) {
     leaveBy.innerHTML = windowAt === -1
       ? "<strong>No dry window</strong> in the next " + HOURS_SHOWN + " hours. Sorry."
       : "<strong>Next dry window: around " + clock(times[windowAt])
-        + "</strong> — enough for a " + RIDE_MINUTES + "-minute ride.";
+        + "</strong> — long enough for your ride.";
   }
 
   // The rain strip.
   const boxes = document.getElementById("rain-boxes");
   boxes.replaceChildren();
   const shown = Math.min(HOURS_SHOWN * 4, rates.length - start);
+  lastShown = shown;
   for (let i = start; i < start + shown; i++) {
     const box = document.createElement("div");
-    box.className = "rain-box" + (i < start + rideSlots ? " ride-window" : "");
+    box.className = "rain-box";
     const prob = probAt(i) ?? 0;
     const fill = Math.min(rates[i] / FULL_BOX_MM_H, 1);
     box.title = clock(times[i]) + " · " + rates[i].toFixed(1) + " mm/h · " + prob + "% chance";
@@ -314,6 +363,28 @@ function render(data) {
     }
     boxes.appendChild(box);
   }
+
+  // The ride bar, drawn over the strip.
+  const span = document.createElement("div");
+  span.className = "ride-span";
+  span.style.width = (Math.min(rideSlots, shown) / shown * 100) + "%";
+  boxes.appendChild(span);
+  boxes.setAttribute("aria-valuenow", rideMinutes);
+  boxes.setAttribute("aria-valuetext", "ride length " + fmtRide(rideMinutes));
+
+  // Secondary question: does the bike need its cover on at home tonight?
+  const coverNote = document.getElementById("cover-note");
+  const hourlyRain = data.hourly.precipitation ?? [];
+  let coverAt = -1;
+  for (let i = 0; i < data.hourly.time.length; i++) {
+    if (data.hourly.time[i] + 3600 <= epochs[start]) continue; // hour already over
+    if ((hourlyRain[i] ?? 0) >= COVER_MM) { coverAt = i; break; }
+  }
+  coverNote.textContent = coverAt === -1
+    ? "Bike cover: skip it — no real rain in the next " + COVER_HOURS + " hours."
+    : "Bike cover: yes — rain around "
+      + clockHour(new Date(data.hourly.time[coverAt] * 1000))
+      + " (" + hourlyRain[coverAt].toFixed(1) + " mm).";
 
   const labels = document.getElementById("hour-labels");
   labels.replaceChildren();
@@ -342,6 +413,47 @@ async function check() {
       + "or try again in a minute.";
   }
 }
+
+// Dragging the ride bar. The strip is the slider: wherever you point, the
+// ride ends there. Re-renders live from the cached forecast; the length is
+// remembered in localStorage for next time.
+const stripEl = document.getElementById("rain-boxes");
+
+function setRideMinutes(minutes) {
+  const max = (lastShown || HOURS_SHOWN * 4) * 15;
+  const next = Math.min(max, Math.max(15, minutes));
+  if (next === rideMinutes) return;
+  rideMinutes = next;
+  if (lastData) render(lastData);
+}
+
+function rideFromPointer(clientX) {
+  if (!lastData || !lastShown) return;
+  const rect = stripEl.getBoundingClientRect();
+  const slot = Math.ceil((clientX - rect.left) / rect.width * lastShown);
+  setRideMinutes(slot * 15);
+}
+
+let draggingRide = false;
+stripEl.addEventListener("pointerdown", e => {
+  draggingRide = true;
+  stripEl.setPointerCapture(e.pointerId);
+  rideFromPointer(e.clientX);
+});
+stripEl.addEventListener("pointermove", e => {
+  if (draggingRide) rideFromPointer(e.clientX);
+});
+stripEl.addEventListener("pointerup", e => {
+  draggingRide = false;
+  localStorage.setItem(RIDE_KEY, rideMinutes);
+});
+stripEl.addEventListener("keydown", e => {
+  const step = { ArrowRight: 15, ArrowUp: 15, ArrowLeft: -15, ArrowDown: -15 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  setRideMinutes(rideMinutes + step);
+  localStorage.setItem(RIDE_KEY, rideMinutes);
+});
 
 check();
 setInterval(check, 5 * 60 * 1000); // the sky changes; so should the page

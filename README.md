@@ -15,11 +15,17 @@ Below the verdict: the next six hours of sky in 15-minute boxes (blue fill =
 rain intensity, hatch = the sky is undecided), and when the next dry window
 long enough for a ride opens up.
 
+The black bar on top of the strip is your ride. **Drag its end** (or focus the
+strip and use arrow keys) to match how long you'll be out — the verdict
+recomputes as you drag, and the length is remembered in `localStorage`. At the
+bottom, one quiet line answers the evening question: does the bike need its
+cover on at home tonight (any hour with ≥0.5 mm in the next 18 hours).
+
 ## Tuning
 
 Everything adjustable is a constant at the top of the script in `index.html`:
-the office coordinates and timezone, the ride length (45 min), and the
-drizzle/pouring thresholds.
+the office coordinates and timezone, the default ride length (45 min), and the
+drizzle/pouring/cover thresholds.
 
 ## Hosting
 
