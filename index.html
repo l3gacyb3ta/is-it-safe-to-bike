@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>is it safe to bike?</title>
+<style>
+:root {
+  --paper: #f6eedd;        /* warm cream */
+  --ink: #241f17;          /* near-black, warm */
+  --ink-soft: #6c6458;     /* secondary text */
+  --rain: #2456c4;         /* blue = water falling from the sky */
+  --go: #1c7a3d;           /* green = ride */
+  --damp: #c06a00;         /* amber = you'll get a little wet */
+  --soaked: #c22e1e;       /* red = you will be poured on */
+  --unknown: #6c6458;      /* grey = no data */
+  --rule: 1px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+/* The colored field the whole placard sits on. Dithered, never a gradient. */
+.sky-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 12px;
+  background-color: var(--field);
+  background-image: conic-gradient(var(--field-dot) 25%, transparent 0 50%,
+                    var(--field-dot) 0 75%, transparent 0);
+  background-size: 6px 6px;
+}
+.sky-field[data-verdict="go"]      { --field: var(--go);      --field-dot: #166432; }
+.sky-field[data-verdict="damp"]    { --field: var(--damp);    --field-dot: #a35a00; }
+.sky-field[data-verdict="soaked"]  { --field: var(--soaked);  --field-dot: #a82617; }
+.sky-field[data-verdict="unknown"] { --field: var(--unknown); --field-dot: #5d564b; }
+
+/* Cream panel inside a white keyline inside the colored field. */
+.report {
+  width: 100%;
+  max-width: 34rem;
+  background: var(--paper);
+  border: var(--rule) solid var(--ink);
+  outline: var(--rule) solid var(--paper);
+  outline-offset: 4px;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.office-line {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 1rem;
+  border-bottom: var(--rule) solid var(--ink);
+  padding-bottom: 0.5rem;
+}
+
+.verdict {
+  font-size: clamp(2.6rem, 12vw, 4.5rem);
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.1em;
+  color: var(--field);
+}
+
+.verdict-rule {
+  border: 0;
+  border-top: 3px solid var(--ink);
+  margin: 0.35rem 0 0.75rem;
+}
+
+.sky-report {
+  margin: 0 0 1.25rem;
+  max-width: 62ch;
+}
+
+.leave-by { margin: 0 0 1.25rem; }
+.leave-by strong { text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Six hours of sky, one box per 15 minutes.
+   Blue fill height = how hard it's raining. Hatch = the sky is undecided. */
+.rain-strip { border-top: var(--rule) solid var(--ink); padding-top: 0.75rem; }
+
+.rain-boxes {
+  display: flex;
+  align-items: flex-end;
+  height: 56px;
+  border: var(--rule) solid var(--ink);
+  background: #fdf8ec;
+  position: relative;
+  cursor: ew-resize;
+  touch-action: none; /* the strip is a slider on touch too */
+}
+.rain-box {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  border-right: var(--rule) solid #d8cdb4;
+}
+.rain-box:last-child { border-right: 0; }
+.rain-box .rainfall {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--rain);
+}
+.rain-box .rain-chance {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: repeating-linear-gradient(45deg,
+              var(--rain) 0 1px, transparent 1px 4px);
+}
+/* Your ride, drawn on top of the weather. Drag its end to match the ride. */
+.ride-span {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  border-top: 3px solid var(--ink);
+  pointer-events: none;
+}
+.ride-span::after {          /* grab tab at the end of the ride */
+  content: "";
+  position: absolute;
+  right: -4px; top: -3px;
+  width: 8px; height: 12px;
+  background: var(--ink);
+}
+
+.hour-labels {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.hour-labels span { flex: 1; }
+
+.strip-legend {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 0.5rem 0 0;
+}
+.strip-legend .rain-swatch, .strip-legend .chance-swatch {
+  display: inline-block;
+  width: 12px; height: 12px;
+  vertical-align: -1px;
+  border: var(--rule) solid var(--ink);
+}
+.strip-legend .rain-swatch { background: var(--rain); }
+.strip-legend .chance-swatch {
+  background: repeating-linear-gradient(45deg,
+              var(--rain) 0 1px, transparent 1px 4px);
+}
+
+.cover-note {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 0.75rem 0 0;
+  border-top: var(--rule) solid #d8cdb4;
+  padding-top: 0.5rem;
+}
+
+.edition-line {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper);
+  margin-top: 16px;
+  text-align: center;
+}
+.edition-line a { color: var(--paper); }
+</style>
+</head>
+<body>
+<main class="sky-field" data-verdict="unknown">
+  <div class="report">
+    <p class="office-line">Is it safe to bike? · Hack Club HQ · Burlington VT</p>
+    <h1 class="verdict" id="verdict">Reading the sky…</h1>
+    <hr class="verdict-rule">
+    <p class="sky-report" id="sky-report">Fetching the forecast for the next few hours.</p>
+    <p class="leave-by" id="leave-by"></p>
+    <section class="rain-strip">
+      <div class="rain-boxes" id="rain-boxes" role="slider" tabindex="0"
+           aria-label="Ride length, drawn on the rain forecast. Drag or use arrow keys."
+           aria-valuemin="15" aria-valuemax="360"></div>
+      <div class="hour-labels" id="hour-labels"></div>
+      <p class="strip-legend">the next 6 hours · each box = 15 min ·
+        <span class="rain-swatch"></span> fill = how hard it's raining ·
+        <span class="chance-swatch"></span> = sky's undecided ·
+        bar on top = your ride if you leave now — drag its end to match your ride</p>
+    </section>
+    <p class="cover-note" id="cover-note"></p>
+  </div>
+  <footer class="edition-line" id="edition-line">
+    IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a> · 44.47°N 73.22°W
+  </footer>
+  <noscript><p style="padding:1rem">This page needs JavaScript to fetch the forecast.
+    Look out a window instead.</p></noscript>
+</main>
+
+<script>
+// Hack Club HQ, 212 Battery St, Burlington VT. Change these to move the office.
+const OFFICE = { lat: 44.4737, lon: -73.2183, tz: "America/New_York" };
+const HOURS_SHOWN = 6;            // width of the rain strip
+const COVER_HOURS = 18;           // how far ahead the bike-cover question looks
+const DRIZZLE_MM_H = 0.6;         // below this you won't notice
+const POURING_MM_H = 2.6;         // above this you come home soaked
+const FULL_BOX_MM_H = 8;          // rain rate that fills a strip box completely
+const COVER_MM = 0.5;             // an hour with this much rain = cover the bike
+
+// How long you're exposed to the sky. The page remembers your usual ride.
+const RIDE_KEY = "iistb-ride-minutes";
+let rideMinutes = Math.min(360, Math.max(15,
+  parseInt(localStorage.getItem(RIDE_KEY), 10) || 45));
+
+const API = "https://api.open-meteo.com/v1/forecast"
+  + `?latitude=${OFFICE.lat}&longitude=${OFFICE.lon}`
+  + "&minutely_15=precipitation,weather_code"
+  + "&hourly=precipitation_probability,precipitation"
+  + `&forecast_minutely_15=${HOURS_SHOWN * 4}&forecast_hours=${COVER_HOURS}`
+  + `&timezone=${OFFICE.tz}&timeformat=unixtime`; // epoch times: unambiguous everywhere
+
+const THUNDER_CODES = new Set([95, 96, 99]);
+
+// Clocks always read office time — that's where the ride starts.
+function clock(date) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: OFFICE.tz });
+}
+function clockHour(date) {
+  return date.toLocaleTimeString([], { hour: "numeric", timeZone: OFFICE.tz }).toLowerCase();
+}
+function fmtRide(m) {
+  if (m < 60) return m + " minutes";
+  const h = Math.floor(m / 60), rest = m % 60;
+  if (rest) return h + "h " + rest + "m";
+  return h === 1 ? "hour" : h + " hours";
+}
+
+let lastData = null;   // kept so dragging the ride bar re-renders without refetching
+let lastShown = 0;     // boxes currently in the strip
+
+function render(data) {
+  lastData = data;
+  const epochs = data.minutely_15.time;                          // unix seconds
+  const times = epochs.map(t => new Date(t * 1000));
+  const rates = data.minutely_15.precipitation.map(mm => mm * 4); // mm per 15min -> mm/h
+  const codes = data.minutely_15.weather_code;
+  const probByHour = new Map(data.hourly.time.map((t, i) =>
+    [t, data.hourly.precipitation_probability[i]]));
+  const probAt = i => probByHour.get(Math.floor(epochs[i] / 3600) * 3600) ?? null;
+
+  // Open-Meteo returns slots starting at the current quarter-hour; drop any
+  // slot already fully in the past, just in case.
+  const now = new Date();
+  let start = 0;
+  while (start < times.length - 1 && times[start + 1] <= now) start++;
+
+  const rideSlots = Math.min(Math.ceil(rideMinutes / 15), rates.length - start);
+  const ride = rates.slice(start, start + rideSlots);
+  const rideMax = Math.max(...ride);
+  const thunder = codes.slice(start, start + rideSlots).some(c => THUNDER_CODES.has(c));
+  const rideProb = probAt(start);
+  const rideLabel = fmtRide(rideMinutes);
+
+  let verdict, headline, report;
+  if (thunder) {
+    verdict = "soaked";
+    headline = "Nope. Thunder.";
+    report = "There's a thunderstorm in the forecast for the next "
+      + rideLabel + ". This one isn't about getting wet — stay in.";
+  } else if (rideMax >= POURING_MM_H) {
+    verdict = "soaked";
+    headline = "Nope. Stay in.";
+    report = "It's properly raining out there — up to "
+      + rideMax.toFixed(1) + " mm/h over the next " + rideLabel
+      + ". You'd come home soaked. Make some tea.";
+  } else if (rideMax >= DRIZZLE_MM_H) {
+    verdict = "damp";
+    headline = "You'll get damp.";
+    report = "Light rain, around " + rideMax.toFixed(1) + " mm/h at worst over the next "
+      + rideLabel + ". Rideable if you don't mind a little water, "
+      + "but bring the jacket.";
+  } else {
+    verdict = "go";
+    headline = "Go bike.";
+    report = "No real rain in the next " + rideLabel + "."
+      + (rideProb !== null && rideProb >= 60
+         ? " The sky is undecided though (" + rideProb + "% chance this hour), so don't dawdle."
+         : " The sky is on your side.");
+  }
+
+  document.querySelector(".sky-field").dataset.verdict = verdict;
+  document.getElementById("verdict").textContent = headline;
+  document.getElementById("sky-report").textContent = report;
+
+  // When does the picture change? If it's dry, how long does the dry hold;
+  // if it's wet, when is the next window long enough for a full dry-ish ride.
+  const leaveBy = document.getElementById("leave-by");
+  if (verdict === "go") {
+    let wet = -1;
+    for (let i = start; i < rates.length; i++) {
+      if (rates[i] >= DRIZZLE_MM_H) { wet = i; break; }
+    }
+    leaveBy.innerHTML = wet === -1
+      ? "<strong>Dry for the next " + HOURS_SHOWN + " hours</strong> — no rush."
+      : "<strong>Dry until about " + clock(times[wet]) + "</strong> — be back by then.";
+  } else {
+    let windowAt = -1;
+    for (let i = start; i <= rates.length - rideSlots; i++) {
+      if (rates.slice(i, i + rideSlots).every(r => r < DRIZZLE_MM_H) &&
+          !codes.slice(i, i + rideSlots).some(c => THUNDER_CODES.has(c))) {
+        windowAt = i; break;
+      }
+    }
+    leaveBy.innerHTML = windowAt === -1
+      ? "<strong>No dry window</strong> in the next " + HOURS_SHOWN + " hours. Sorry."
+      : "<strong>Next dry window: around " + clock(times[windowAt])
+        + "</strong> — long enough for your ride.";
+  }
+
+  // The rain strip.
+  const boxes = document.getElementById("rain-boxes");
+  boxes.replaceChildren();
+  const shown = Math.min(HOURS_SHOWN * 4, rates.length - start);
+  lastShown = shown;
+  for (let i = start; i < start + shown; i++) {
+    const box = document.createElement("div");
+    box.className = "rain-box";
+    const prob = probAt(i) ?? 0;
+    const fill = Math.min(rates[i] / FULL_BOX_MM_H, 1);
+    box.title = clock(times[i]) + " · " + rates[i].toFixed(1) + " mm/h · " + prob + "% chance";
+    if (fill > 0) {
+      const rain = document.createElement("div");
+      rain.className = "rainfall";
+      rain.style.height = Math.max(fill * 100, 8) + "%";
+      box.appendChild(rain);
+    } else if (prob >= 50) {
+      const chance = document.createElement("div");
+      chance.className = "rain-chance";
+      chance.style.height = "30%";
+      box.appendChild(chance);
+    }
+    boxes.appendChild(box);
+  }
+
+  // The ride bar, drawn over the strip.
+  const span = document.createElement("div");
+  span.className = "ride-span";
+  span.style.width = (Math.min(rideSlots, shown) / shown * 100) + "%";
+  boxes.appendChild(span);
+  boxes.setAttribute("aria-valuenow", rideMinutes);
+  boxes.setAttribute("aria-valuetext", "ride length " + fmtRide(rideMinutes));
+
+  // Secondary question: does the bike need its cover on at home tonight?
+  const coverNote = document.getElementById("cover-note");
+  const hourlyRain = data.hourly.precipitation ?? [];
+  let coverAt = -1;
+  for (let i = 0; i < data.hourly.time.length; i++) {
+    if (data.hourly.time[i] + 3600 <= epochs[start]) continue; // hour already over
+    if ((hourlyRain[i] ?? 0) >= COVER_MM) { coverAt = i; break; }
+  }
+  coverNote.textContent = coverAt === -1
+    ? "Bike cover: skip it — no real rain in the next " + COVER_HOURS + " hours."
+    : "Bike cover: yes — rain around "
+      + clockHour(new Date(data.hourly.time[coverAt] * 1000))
+      + " (" + hourlyRain[coverAt].toFixed(1) + " mm).";
+
+  const labels = document.getElementById("hour-labels");
+  labels.replaceChildren();
+  for (let i = start; i < start + shown; i += 4) {
+    const span = document.createElement("span");
+    span.textContent = times[i].toLocaleTimeString([],
+      { hour: "numeric", timeZone: OFFICE.tz }).toLowerCase();
+    labels.appendChild(span);
+  }
+
+  document.getElementById("edition-line").innerHTML =
+    'IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a>'
+    + " · 44.47°N 73.22°W · FETCHED " + clock(now);
+}
+
+async function check() {
+  try {
+    const res = await fetch(API);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    render(await res.json());
+  } catch (err) {
+    document.querySelector(".sky-field").dataset.verdict = "unknown";
+    document.getElementById("verdict").textContent = "Can't see the sky.";
+    document.getElementById("sky-report").textContent =
+      "Couldn't reach the forecast (" + err.message + "). Look out a window, "
+      + "or try again in a minute.";
+  }
+}
+
+// Dragging the ride bar. The strip is the slider: wherever you point, the
+// ride ends there. Re-renders live from the cached forecast; the length is
+// remembered in localStorage for next time.
+const stripEl = document.getElementById("rain-boxes");
+
+function setRideMinutes(minutes) {
+  const max = (lastShown || HOURS_SHOWN * 4) * 15;
+  const next = Math.min(max, Math.max(15, minutes));
+  if (next === rideMinutes) return;
+  rideMinutes = next;
+  if (lastData) render(lastData);
+}
+
+function rideFromPointer(clientX) {
+  if (!lastData || !lastShown) return;
+  const rect = stripEl.getBoundingClientRect();
+  const slot = Math.ceil((clientX - rect.left) / rect.width * lastShown);
+  setRideMinutes(slot * 15);
+}
+
+let draggingRide = false;
+stripEl.addEventListener("pointerdown", e => {
+  draggingRide = true;
+  stripEl.setPointerCapture(e.pointerId);
+  rideFromPointer(e.clientX);
+});
+stripEl.addEventListener("pointermove", e => {
+  if (draggingRide) rideFromPointer(e.clientX);
+});
+stripEl.addEventListener("pointerup", e => {
+  draggingRide = false;
+  localStorage.setItem(RIDE_KEY, rideMinutes);
+});
+stripEl.addEventListener("keydown", e => {
+  const step = { ArrowRight: 15, ArrowUp: 15, ArrowLeft: -15, ArrowDown: -15 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  setRideMinutes(rideMinutes + step);
+  localStorage.setItem(RIDE_KEY, rideMinutes);
+});
+
+check();
+setInterval(check, 5 * 60 * 1000); // the sky changes; so should the page
+</script>
+</body>
+</html>
