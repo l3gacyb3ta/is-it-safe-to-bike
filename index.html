@@ -6,14 +6,14 @@
 <title>is it safe to bike?</title>
 <style>
 :root {
-  --paper: #f6eedd;        /* warm cream */
-  --ink: #241f17;          /* near-black, warm */
-  --ink-soft: #6c6458;     /* secondary text */
+  --paper: #ffffff;
+  --ink: #1a1a1a;          /* near-black, never pure #000 */
+  --ink-soft: #666666;     /* secondary text */
   --rain: #2456c4;         /* blue = water falling from the sky */
   --go: #1c7a3d;           /* green = ride */
-  --damp: #c06a00;         /* amber = you'll get a little wet */
+  --damp: #a85d00;         /* amber = you'll get a little wet */
   --soaked: #c22e1e;       /* red = you will be poured on */
-  --unknown: #6c6458;      /* grey = no data */
+  --unknown: #666666;      /* grey = no data */
   --rule: 1px;
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                "Helvetica Neue", Arial, sans-serif;
@@ -48,26 +48,22 @@ body {
   background-size: 6px 6px;
 }
 .sky-field[data-verdict="go"]      { --field: var(--go);      --field-dot: #166432; }
-.sky-field[data-verdict="damp"]    { --field: var(--damp);    --field-dot: #a35a00; }
+.sky-field[data-verdict="damp"]    { --field: var(--damp);    --field-dot: #8f4f00; }
 .sky-field[data-verdict="soaked"]  { --field: var(--soaked);  --field-dot: #a82617; }
-.sky-field[data-verdict="unknown"] { --field: var(--unknown); --field-dot: #5d564b; }
+.sky-field[data-verdict="unknown"] { --field: var(--unknown); --field-dot: #595959; }
 
-/* Cream panel inside a white keyline inside the colored field. */
+/* White document panel; one keyline separates it from the verdict field. */
 .report {
   width: 100%;
   max-width: 34rem;
   background: var(--paper);
   border: var(--rule) solid var(--ink);
-  outline: var(--rule) solid var(--paper);
-  outline-offset: 4px;
   padding: 1.25rem 1.5rem 1.5rem;
 }
 
 .office-line {
   font-family: var(--font-mono);
   font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-soft);
   margin: 0 0 1rem;
   border-bottom: var(--rule) solid var(--ink);
@@ -96,7 +92,6 @@ body {
 }
 
 .leave-by { margin: 0 0 1.25rem; }
-.leave-by strong { text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* Six hours of sky, one box per 15 minutes.
    Blue fill height = how hard it's raining. Hatch = the sky is undecided. */
@@ -107,7 +102,7 @@ body {
   align-items: flex-end;
   height: 56px;
   border: var(--rule) solid var(--ink);
-  background: #fdf8ec;
+  background: var(--paper);
   position: relative;
   cursor: ew-resize;
   touch-action: none; /* the strip is a slider on touch too */
@@ -116,7 +111,7 @@ body {
   flex: 1;
   height: 100%;
   position: relative;
-  border-right: var(--rule) solid #d8cdb4;
+  border-right: var(--rule) solid #dddddd;
 }
 .rain-box:last-child { border-right: 0; }
 .rain-box .rainfall {
@@ -176,15 +171,13 @@ body {
   font-size: 14px;
   color: var(--ink-soft);
   margin: 0.75rem 0 0;
-  border-top: var(--rule) solid #d8cdb4;
+  border-top: var(--rule) solid #dddddd;
   padding-top: 0.5rem;
 }
 
 .edition-line {
   font-family: var(--font-mono);
   font-size: 14px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--paper);
   margin-top: 16px;
   text-align: center;
@@ -213,7 +206,7 @@ body {
     <p class="cover-note" id="cover-note"></p>
   </div>
   <footer class="edition-line" id="edition-line">
-    IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a> · 44.47°N 73.22°W
+    last edit 2026-07-29 · data: <a href="https://open-meteo.com/">open-meteo</a> · 44.47°N 73.22°W
   </footer>
   <noscript><p style="padding:1rem">This page needs JavaScript to fetch the forecast.
     Look out a window instead.</p></noscript>
@@ -396,8 +389,8 @@ function render(data) {
   }
 
   document.getElementById("edition-line").innerHTML =
-    'IISTB FORM 001 · DATA: <a href="https://open-meteo.com/">OPEN-METEO</a>'
-    + " · 44.47°N 73.22°W · FETCHED " + clock(now);
+    'last edit 2026-07-29 · data: <a href="https://open-meteo.com/">open-meteo</a>'
+    + " · 44.47°N 73.22°W · fetched " + clock(now);
 }
 
 async function check() {
